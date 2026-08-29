@@ -1,78 +1,158 @@
-# MCP Multi-Tool AI Agent with LangGraph
+# 🤖 MCP + LangGraph AI Agent
 
-A multi-tool AI Agent built using **Model Context Protocol (MCP)**, **LangChain**, **LangGraph**, and **OpenRouter**.
+A multi-tool AI Agent built using **LangGraph, LangChain, Model Context Protocol (MCP), OpenRouter, and Streamlit**.
 
-The project demonstrates how an LLM can dynamically select and execute tools exposed by a custom MCP server.
-
----
-
-## 🚀 Project Overview
-
-This project combines:
-
-- Custom MCP Server
-- MCP Client
-- OpenRouter LLM
-- LangChain
-- LangGraph
-- Multiple tools
-- Tool calling
-- Conditional agent routing
-- Error handling
-- Conversation state
-- Checkpointing
-- Thread-based conversations
-
-The main goal is to understand how modern AI Agents interact with external tools through MCP.
+The agent can understand a user's request, decide which tool is required, execute the appropriate tool through an MCP server, and return the final response.
 
 ---
 
-## 🏗️ Architecture
+# ✨ Features
+
+- 🤖 AI Agent using LangGraph
+- 🔌 Model Context Protocol (MCP) integration
+- 🧮 Multi-tool support
+- 🧠 LLM-based tool selection
+- 🔄 Agent → Tool → Agent workflow
+- 🛡️ Tool error handling
+- 💾 Conversation state using LangGraph Checkpointer
+- 🆔 Thread-based conversation handling
+- 💬 Interactive Streamlit Chat UI
+- 🔐 OpenRouter LLM integration
+- ⚡ Asynchronous MCP tool execution
+- 🔗 LangChain + LangGraph + MCP integration
+
+---
+
+# 🛠️ Available Tools
+
+The MCP server provides the following tools:
+
+## 🧮 Calculator
+
+The agent can perform basic mathematical operations.
+
+### Tools
 
 ```text
-                    User
-                      |
-                      v
-              +---------------+
-              |  LangGraph    |
-              |     Agent     |
-              +-------+-------+
-                      |
-                      v
-              +---------------+
-              |     LLM       |
-              |   OpenRouter  |
-              +-------+-------+
-                      |
-                Tool Selection
-                      |
-                      v
-              +---------------+
-              |   ToolNode    |
-              +-------+-------+
-                      |
-                      v
-              +---------------+
-              |   MCP Client  |
-              +-------+-------+
-                      |
-                      v
-        +---------------------------+
-        |       MCP Server          |
-        |                           |
-        |  add                      |
-        |  subtract                 |
-        |  multiply                 |
-        |  divide                   |
-        |  get_weather              |
-        |  word_count               |
-        +---------------------------+
-                      |
-                      v
-                  Tool Result
-                      |
-                      v
-                    LLM
-                      |
-                      v
-                Final Answer
+add
+subtract
+multiply
+divide
+
+
+                    ┌─────────────────────┐
+                    │    Streamlit UI     │
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │   LangGraph Agent   │
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │    OpenRouter LLM   │
+                    └──────────┬──────────┘
+                               │
+                        Tool Selection
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │      ToolNode       │
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │     MCP Server      │
+                    └──────────┬──────────┘
+                               │
+              ┌────────────────┼────────────────┐
+              │                │                │
+              ▼                ▼                ▼
+        Calculator          Weather         Word Count
+
+
+START
+  │
+  ▼
+AGENT
+  │
+  ▼
+Tool Required?
+  │
+  ├────────────── No ──────────────► END
+  │
+  ▼
+TOOLS
+  │
+  ▼
+AGENT
+  │
+  ▼
+END
+
+mcp-calculator-server/
+│
+├── server.py
+├── client.py
+├── langchain_client.py
+├── langgraph_agent.py
+├── streamlit_app.py
+│
+├── requirements.txt
+├── README.md
+├── .gitignore
+└── .env
+
+
+| Technology        | Purpose                                |
+| ----------------- | -------------------------------------- |
+| **Python**        | Core programming language              |
+| **LangChain**     | LLM and tool integration               |
+| **LangGraph**     | Agent workflow and state management    |
+| **MCP**           | Standardized tool/server communication |
+| **OpenRouter**    | LLM API provider                       |
+| **ChatOpenAI**    | OpenAI-compatible LLM interface        |
+| **Streamlit**     | Interactive web UI                     |
+| **Pydantic**      | Data validation                        |
+| **asyncio**       | Asynchronous execution                 |
+| **python-dotenv** | Environment variable management        |
+
+
+streamlit run streamlit_app.py
+
+┌──────────────────────────────────────────────┐
+│ 🤖 MCP + LangGraph AI Agent                 │
+│ Calculator • Weather • Word Count           │
+│                                              │
+│ You: Calculate 25 * 8                        │
+│                                              │
+│ Agent:                                       │
+│ 25 × 8 = 200                                 │
+│                                              │
+│ Ask something...                             │
+└──────────────────────────────────────────────┘
+
+🚀 How to Run
+1. Create virtual environment
+python -m venv venv
+2. Activate environment
+
+Windows:
+
+venv\Scripts\activate
+3. Install dependencies
+
+pip install -r requirements.txt
+
+4. Configure API key
+
+Create:
+
+.env
+
+and add:
+
+OPENROUTER_API_KEY=your_api_key_here
+5. Start Streamlit
+streamlit run streamlit_app.py

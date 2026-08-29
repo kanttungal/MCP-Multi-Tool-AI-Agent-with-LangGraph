@@ -1,25 +1,20 @@
 import asyncio
 import os
-
+from langchain_core.messages import HumanMessage
 from dotenv import load_dotenv
-
 from langchain_openai import ChatOpenAI
 from langchain_mcp_adapters.client import MultiServerMCPClient
-
 from langgraph.graph import (
     StateGraph,
     MessagesState,
     START,
     END,
 )
-
 from langgraph.prebuilt import (
     ToolNode,
     tools_condition,
 )
-
 from langgraph.checkpoint.memory import InMemorySaver
-
 
 # ============================================================
 # LOAD ENVIRONMENT VARIABLES
@@ -44,6 +39,21 @@ client = MultiServerMCPClient(
     }
 )
 
+def create_llm():
+
+    api_key = os.getenv("OPENROUTER_API_KEY")
+
+    if not api_key:
+        raise RuntimeError(
+            "OPENROUTER_API_KEY is not set."
+            "Please configure it your .env file."
+        )
+
+    return ChatOpenAI(
+        model = "openai/gpt-4o-mini",
+        api_key = api_key,
+        base_url = "https://openrouter.ai/api/v1",
+    )
 
 # ============================================================
 # 2. MAIN
@@ -51,32 +61,10 @@ client = MultiServerMCPClient(
 
 async def main():
 
-    # ========================================================
-    # 3. OPENROUTER API KEY
-    # ========================================================
-
-    api_key = os.getenv("OPENROUTER_API_KEY")
-
-    if not api_key:
-        raise RuntimeError(
-            "OPENROUTER_API_KEY is not set. "
-            "Please configure it in your .env file."
-        )
-
+    llm = create_llm()
 
     # ========================================================
-    # 4. OPENROUTER LLM
-    # ========================================================
-
-    llm = ChatOpenAI(
-        model="openai/gpt-4o-mini",
-        api_key=api_key,
-        base_url="https://openrouter.ai/api/v1",
-    )
-
-
-    # ========================================================
-    # 5. LOAD MCP TOOLS
+    # 3. LOAD MCP TOOLS
     # ========================================================
 
     tools = await client.get_tools()
@@ -89,31 +77,28 @@ async def main():
             f"{tool.description}"
         )
 
-
     # ========================================================
-    # 6. BIND TOOLS TO LLM
+    # 4. BIND MCP TOOLS TO LLM
     # ========================================================
 
     llm_with_tools = llm.bind_tools(tools)
 
-
     # ========================================================
-    # 7. AGENT NODE
+    # 5. CREATE AGENT NODE
     # ========================================================
 
-    async def agent_node(state: MessagesState):
+    async def agent_node(state:MessagesState):
 
         response = await llm_with_tools.ainvoke(
             state["messages"]
         )
 
         return {
-            "messages": [response]
+            "messages":[response]
         }
 
-
     # ========================================================
-    # 8. TOOL NODE
+    # 6. CREATE TOOL NODE
     # ========================================================
 
     tool_node = ToolNode(
@@ -121,16 +106,20 @@ async def main():
         handle_tool_errors=True
     )
 
+    # ========================================================
+    # 7.CHECKPOINTER
+    # ========================================================
+
+    checkpointer = InMemorySaver()
 
     # ========================================================
-    # 9. CREATE GRAPH
+    # 8. CREATE LANGGRAPH
     # ========================================================
 
     graph_builder = StateGraph(MessagesState)
 
-
     # ========================================================
-    # 10. ADD AGENT NODE
+    # 9. ADD NODES
     # ========================================================
 
     graph_builder.add_node(
@@ -138,19 +127,13 @@ async def main():
         agent_node
     )
 
-
-    # ========================================================
-    # 11. ADD TOOL NODE
-    # ========================================================
-
     graph_builder.add_node(
         "tools",
         tool_node
     )
 
-
     # ========================================================
-    # 12. START → AGENT
+    # 10. START → AGENT
     # ========================================================
 
     graph_builder.add_edge(
@@ -158,23 +141,21 @@ async def main():
         "agent"
     )
 
-
     # ========================================================
-    # 13. AGENT → TOOLS OR END
+    # 11. AGENT → TOOLS OR END
     # ========================================================
 
     graph_builder.add_conditional_edges(
         "agent",
         tools_condition,
         {
-            "tools": "tools",
-            END: END,
+            "tools":"tools",
+            END: END
         }
     )
 
-
     # ========================================================
-    # 14. TOOLS → AGENT
+    # 12. TOOLS → AGENT
     # ========================================================
 
     graph_builder.add_edge(
@@ -182,81 +163,61 @@ async def main():
         "agent"
     )
 
-
     # ========================================================
-    # 15. CREATE CHECKPOINTER
-    # ========================================================
-
-    checkpointer = InMemorySaver()
-
-
-    # ========================================================
-    # 16. COMPILE GRAPH WITH CHECKPOINTER
+    # 13. COMPILE GRAPH
     # ========================================================
 
     graph = graph_builder.compile(
-        checkpointer=checkpointer
+        checkpointer = checkpointer
     )
 
-
     # ========================================================
-    # 17. THREAD ID
+    # 14. MULTI-TURN CHAT
     # ========================================================
 
-    config = {
-        "configurable": {
-            "thread_id": "user_001"
-        }
-    }
+    thread_id = "user_001"
 
-
-    # ========================================================
-    # 18. CHAT LOOP
-    # ========================================================
+    print("\n===================================")
+    print("   MCP + LangGraph AI Agent")
+    print("   Type 'exit' to quit")
+    print("===================================")
 
     while True:
 
         user_input = input("\nYou: ")
 
         if user_input.lower() in ["exit", "quit"]:
-
             print("\nGoodbye!")
-
             break
-
-
-        # ====================================================
-        # RUN GRAPH
-        # ====================================================
 
         result = await graph.ainvoke(
             {
                 "messages": [
-                    {
-                        "role": "user",
-                        "content": user_input,
-                    }
+                    HumanMessage(
+                        content=user_input
+                    )
                 ]
             },
-            config=config
+            config={
+                "configurable": {
+                    "thread_id": thread_id
+                }
+            }
         )
-
-
-        # ====================================================
-        # GET FINAL MESSAGE
-        # ====================================================
 
         final_message = result["messages"][-1]
 
-
         print("\nAgent:")
-
         print(final_message.content)
 
+    # ========================================================
+    # 15. PRINT FINAL RESPONSE
+    # ========================================================
 
-# ============================================================
-# ENTRY POINT
-# ============================================================
+    final_message = result["messages"][-1]
+
+    print("\nAgent:")
+    print(final_message.content)
 
 if __name__ == "__main__":
     asyncio.run(main())
