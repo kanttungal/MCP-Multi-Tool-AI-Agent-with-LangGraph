@@ -1,7 +1,8 @@
-mcp>=2.0.0
-langchain
-langchain-openai
-langchain-mcp-adapters
-langgraph
+streamlit
 python-dotenv
-openai
+langchain
+langchain-core
+langchain-openai
+langchain-mcp-adapters==0.3.2
+langgraph
+mcp==1.29.0
