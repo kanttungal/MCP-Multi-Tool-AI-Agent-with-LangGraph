@@ -20,7 +20,7 @@ from langgraph.prebuilt import (
 from langchain_openai import ChatOpenAI
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
-import os
+import os,sys
 from dotenv import load_dotenv
 
 
@@ -39,9 +39,9 @@ client = MultiServerMCPClient(
     {
         "calculator": {
             "transport": "stdio",
-            "command": r"D:\mcp-calculator-server\venv\Scripts\python.exe",
+            "command": sys.executable,
             "args": [
-                r"D:\mcp-calculator-server\server.py"
+                "server.py"
             ],
         }
     }
