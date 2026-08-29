@@ -40,6 +40,9 @@ multiply
 divide
 
 
+🏗️ Architecture
+
+
                     ┌─────────────────────┐
                     │    Streamlit UI     │
                     └──────────┬──────────┘
@@ -72,24 +75,7 @@ divide
         Calculator          Weather         Word Count
 
 
-START
-  │
-  ▼
-AGENT
-  │
-  ▼
-Tool Required?
-  │
-  ├────────────── No ──────────────► END
-  │
-  ▼
-TOOLS
-  │
-  ▼
-AGENT
-  │
-  ▼
-END
+# Project Structure
 
 mcp-calculator-server/
 │
@@ -104,6 +90,7 @@ mcp-calculator-server/
 ├── .gitignore
 └── .env
 
+#💻 Technologies Used
 
 | Technology        | Purpose                                |
 | ----------------- | -------------------------------------- |
@@ -118,6 +105,8 @@ mcp-calculator-server/
 | **asyncio**       | Asynchronous execution                 |
 | **python-dotenv** | Environment variable management        |
 
+
+#🖥️ Streamlit Demo
 
 streamlit run streamlit_app.py
 
@@ -154,5 +143,6 @@ Create:
 and add:
 
 OPENROUTER_API_KEY=your_api_key_here
+
 5. Start Streamlit
 streamlit run streamlit_app.py
