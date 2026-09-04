@@ -214,10 +214,10 @@ async def main():
     # 15. PRINT FINAL RESPONSE
     # ========================================================
 
-    final_message = result["messages"][-1]
+        final_message = result["messages"][-1]
 
-    print("\nAgent:")
-    print(final_message.content)
+        print("\nAgent:")
+        print(final_message.content)
 
 if __name__ == "__main__":
     asyncio.run(main())
