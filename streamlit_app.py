@@ -62,7 +62,7 @@ def create_llm():
         )
 
     return ChatOpenAI(
-        model="openai/gpt-4o-mini",
+        model="openrouter/free",
         api_key=api_key,
         base_url="https://openrouter.ai/api/v1",
         max_tokens = 1000,
