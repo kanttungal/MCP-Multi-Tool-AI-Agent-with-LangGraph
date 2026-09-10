@@ -65,7 +65,7 @@ def create_llm():
         model="openai/gpt-4o-mini",
         api_key=api_key,
         base_url="https://openrouter.ai/api/v1",
-        max_token = 1000,
+        max_tokens = 1000,
     )
 
 
