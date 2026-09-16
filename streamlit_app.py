@@ -11,48 +11,20 @@ from langchain_openai import ChatOpenAI
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.graph import (
-    StateGraph,
-    MessagesState,
-    START,
-    END,
-)
+from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.prebuilt import ToolNode, tools_condition
 
 
-# ============================================================
-# ENVIRONMENT
-# ============================================================
-
 load_dotenv()
-
-
-# ============================================================
-# STREAMLIT CONFIG
-# ============================================================
 
 st.set_page_config(
     page_title="MCP AI Agent",
     page_icon="🤖",
-    layout="centered",
+    layout="centered"
 )
 
 
-# ============================================================
-# API KEY
-# ============================================================
-
 def get_api_key():
-    """
-    Get OpenRouter API key.
-
-    Local:
-        .env
-
-    Streamlit Cloud:
-        Streamlit Secrets
-    """
-
     api_key = os.getenv("OPENROUTER_API_KEY")
 
     if not api_key:
@@ -62,153 +34,67 @@ def get_api_key():
             api_key = None
 
     if not api_key:
-        raise RuntimeError(
-            "OPENROUTER_API_KEY is missing. "
-            "Add it to your .env locally or Streamlit Secrets on Cloud."
-        )
+        raise RuntimeError("OPENROUTER_API_KEY is missing.")
 
     return api_key
 
 
-# ============================================================
-# MCP CLIENT
-# ============================================================
+def create_llm():
+    return ChatOpenAI(
+        model="openrouter/free",
+        api_key=get_api_key(),
+        base_url="https://openrouter.ai/api/v1",
+        temperature=0.2,
+        max_tokens=500
+    )
 
-client = MultiServerMCPClient(
-    {
+
+async def run_agent(user_input, thread_id, checkpointer):
+
+    client = MultiServerMCPClient({
         "calculator": {
             "transport": "stdio",
             "command": sys.executable,
-            "args": ["server.py"],
+            "args": ["server.py"]
         }
-    }
-)
+    })
 
-
-# ============================================================
-# LLM
-# ============================================================
-
-def create_llm():
-
-    api_key = get_api_key()
-
-    return ChatOpenAI(
-        model="openrouter/free",
-        api_key=api_key,
-        base_url="https://openrouter.ai/api/v1",
-        temperature=0.2,
-        max_tokens=500,
-    )
-
-
-# ============================================================
-# CREATE LANGGRAPH
-# ============================================================
-
-async def create_graph():
-
-    llm = create_llm()
-
-    # Get MCP tools
     tools = await client.get_tools()
 
-    # Bind MCP tools to LLM
+    llm = create_llm()
     llm_with_tools = llm.bind_tools(tools)
 
-    # --------------------------------------------------------
-    # AGENT NODE
-    # --------------------------------------------------------
-
     async def agent_node(state: MessagesState):
-
-        response = await llm_with_tools.ainvoke(
-            state["messages"]
-        )
-
-        return {
-            "messages": [response]
-        }
-
-    # --------------------------------------------------------
-    # TOOL NODE
-    # --------------------------------------------------------
-
-    tool_node = ToolNode(
-        tools,
-        handle_tool_errors=True
-    )
-
-    # --------------------------------------------------------
-    # CHECKPOINTER
-    # --------------------------------------------------------
-
-    checkpointer = InMemorySaver()
-
-    # --------------------------------------------------------
-    # GRAPH
-    # --------------------------------------------------------
+        response = await llm_with_tools.ainvoke(state["messages"])
+        return {"messages": [response]}
 
     graph_builder = StateGraph(MessagesState)
 
-    graph_builder.add_node(
-        "agent",
-        agent_node
-    )
-
+    graph_builder.add_node("agent", agent_node)
     graph_builder.add_node(
         "tools",
-        tool_node
+        ToolNode(tools, handle_tool_errors=True)
     )
 
-    # START → AGENT
-    graph_builder.add_edge(
-        START,
-        "agent"
-    )
+    graph_builder.add_edge(START, "agent")
 
-    # AGENT → TOOLS or END
     graph_builder.add_conditional_edges(
         "agent",
         tools_condition,
         {
             "tools": "tools",
-            END: END,
+            END: END
         }
     )
 
-    # TOOLS → AGENT
-    graph_builder.add_edge(
-        "tools",
-        "agent"
-    )
+    graph_builder.add_edge("tools", "agent")
 
-    # Compile graph
     graph = graph_builder.compile(
         checkpointer=checkpointer
     )
 
-    return graph
-
-
-# ============================================================
-# RUN GRAPH
-# ============================================================
-
-async def run_graph(
-    graph,
-    user_input,
-    thread_id
-):
-
-    result = await graph.ainvoke(
-        {
-            "messages": [
-                HumanMessage(
-                    content=user_input
-                )
-            ]
-        },
+    return await graph.ainvoke(
+        {"messages": [HumanMessage(content=user_input)]},
         config={
             "configurable": {
                 "thread_id": thread_id
@@ -216,238 +102,101 @@ async def run_graph(
         }
     )
 
-    return result
 
-
-# ============================================================
-# SESSION STATE
-# ============================================================
-
+# Session state
 if "thread_id" not in st.session_state:
-
-    st.session_state.thread_id = str(
-        uuid.uuid4()
-    )
-
+    st.session_state.thread_id = str(uuid.uuid4())
 
 if "messages" not in st.session_state:
-
     st.session_state.messages = []
 
-
-if "graph" not in st.session_state:
-
-    try:
-
-        st.session_state.graph = asyncio.run(
-            create_graph()
-        )
-
-    except Exception as e:
-
-        st.error(
-            f"Failed to initialize AI Agent: {e}"
-        )
-
-        st.stop()
+if "checkpointer" not in st.session_state:
+    st.session_state.checkpointer = InMemorySaver()
 
 
-# ============================================================
-# TITLE
-# ============================================================
-
+# UI
 st.title("🤖 MCP + LangGraph AI Agent")
+st.caption("Calculator • Weather • Word Count")
 
-st.caption(
-    "Calculator • Weather • Word Count"
-)
-
-
-# ============================================================
-# SIDEBAR
-# ============================================================
 
 with st.sidebar:
-
     st.header("⚙️ Chat Settings")
 
     st.write("Thread ID:")
+    st.code(st.session_state.thread_id)
 
-    st.code(
-        st.session_state.thread_id,
-        language="text"
-    )
-
-    if st.button(
-        "🆕 New Chat",
-        use_container_width=True
-    ):
-
-        st.session_state.thread_id = str(
-            uuid.uuid4()
-        )
-
+    if st.button("🆕 New Chat", use_container_width=True):
+        st.session_state.thread_id = str(uuid.uuid4())
         st.session_state.messages = []
-
         st.rerun()
 
     st.divider()
 
     st.header("🛠️ Available Tools")
-
     st.write("➕ Calculator")
     st.write("🌤️ Weather")
     st.write("📝 Word Count")
 
 
-# ============================================================
-# CHAT HISTORY
-# ============================================================
-
+# Chat history
 for message in st.session_state.messages:
-
-    with st.chat_message(
-        message["role"]
-    ):
-
-        st.write(
-            message["content"]
-        )
+    with st.chat_message(message["role"]):
+        st.write(message["content"])
 
 
-# ============================================================
-# CHAT INPUT
-# ============================================================
+user_input = st.chat_input("Ask something...")
 
-user_input = st.chat_input(
-    "Ask something..."
-)
-
-
-# ============================================================
-# PROCESS USER MESSAGE
-# ============================================================
 
 if user_input:
 
-    # --------------------------------------------------------
-    # SAVE USER MESSAGE
-    # --------------------------------------------------------
-
-    st.session_state.messages.append(
-        {
-            "role": "user",
-            "content": user_input
-        }
-    )
+    st.session_state.messages.append({
+        "role": "user",
+        "content": user_input
+    })
 
     with st.chat_message("user"):
-
         st.write(user_input)
 
-    # --------------------------------------------------------
-    # RUN AGENT
-    # --------------------------------------------------------
-
     with st.chat_message("assistant"):
-
         with st.spinner("Thinking..."):
 
             try:
-
                 result = asyncio.run(
-                    run_graph(
-                        st.session_state.graph,
+                    run_agent(
                         user_input,
-                        st.session_state.thread_id
+                        st.session_state.thread_id,
+                        st.session_state.checkpointer
                     )
                 )
 
-                # ------------------------------------------------
-                # GET FINAL MESSAGE
-                # ------------------------------------------------
+                response = result["messages"][-1].content
 
-                final_message = result["messages"][-1]
+                if not isinstance(response, str):
+                    response = str(response)
 
-                assistant_response = (
-                    final_message.content
-                )
+                st.write(response)
 
-                # Some models can return structured content.
-                if not isinstance(
-                    assistant_response,
-                    str
-                ):
-
-                    assistant_response = str(
-                        assistant_response
-                    )
-
-                # ------------------------------------------------
-                # DISPLAY FINAL RESPONSE ONLY
-                # ------------------------------------------------
-
-                st.write(
-                    assistant_response
-                )
-
-                # ------------------------------------------------
-                # SAVE ASSISTANT RESPONSE
-                # ------------------------------------------------
-
-                st.session_state.messages.append(
-                    {
-                        "role": "assistant",
-                        "content": assistant_response
-                    }
-                )
-
-            # ----------------------------------------------------
-            # API / GENERAL ERROR HANDLING
-            # ----------------------------------------------------
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": response
+                })
 
             except Exception as e:
 
-                error_type = type(e).__name__
-
-                # API status code if available
-                status_code = getattr(
-                    e,
-                    "status_code",
-                    None
-                )
+                status_code = getattr(e, "status_code", None)
 
                 if status_code == 402:
-
-                    st.error(
-                        "OpenRouter credits are insufficient "
-                        "for this request. Please use an "
-                        "available free model or add credits."
-                    )
+                    st.error("OpenRouter credits are insufficient.")
 
                 elif status_code == 401:
-
-                    st.error(
-                        "OpenRouter API key is invalid "
-                        "or missing."
-                    )
+                    st.error("OpenRouter API key is invalid or missing.")
 
                 elif status_code == 429:
-
-                    st.error(
-                        "OpenRouter rate limit reached. "
-                        "Please try again later."
-                    )
+                    st.error("OpenRouter rate limit reached.")
 
                 elif status_code and status_code >= 500:
-
-                    st.error(
-                        "The LLM provider returned a server error. "
-                        "Please try again."
-                    )
+                    st.error("LLM provider server error. Please try again.")
 
                 else:
+                    st.error(f"{type(e).__name__}: {e}")
 
-                    st.error(
-                        f"{error_type}: {str(e)}"
-                    )
