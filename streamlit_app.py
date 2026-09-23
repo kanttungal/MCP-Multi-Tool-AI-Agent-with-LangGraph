@@ -65,18 +65,30 @@ async def run_agent(user_input, thread_id, checkpointer):
     llm_with_tools = llm.bind_tools(tools)
 
     async def agent_node(state: MessagesState):
-        response = await llm_with_tools.ainvoke(state["messages"])
+        response = await llm_with_tools.ainvoke(
+            state["messages"]
+        )
         return {"messages": [response]}
 
     graph_builder = StateGraph(MessagesState)
 
-    graph_builder.add_node("agent", agent_node)
     graph_builder.add_node(
-        "tools",
-        ToolNode(tools, handle_tool_errors=True)
+        "agent",
+        agent_node
     )
 
-    graph_builder.add_edge(START, "agent")
+    graph_builder.add_node(
+        "tools",
+        ToolNode(
+            tools,
+            handle_tool_errors=True
+        )
+    )
+
+    graph_builder.add_edge(
+        START,
+        "agent"
+    )
 
     graph_builder.add_conditional_edges(
         "agent",
@@ -87,14 +99,21 @@ async def run_agent(user_input, thread_id, checkpointer):
         }
     )
 
-    graph_builder.add_edge("tools", "agent")
+    graph_builder.add_edge(
+        "tools",
+        "agent"
+    )
 
     graph = graph_builder.compile(
         checkpointer=checkpointer
     )
 
     return await graph.ainvoke(
-        {"messages": [HumanMessage(content=user_input)]},
+        {
+            "messages": [
+                HumanMessage(content=user_input)
+            ]
+        },
         config={
             "configurable": {
                 "thread_id": thread_id
@@ -103,29 +122,49 @@ async def run_agent(user_input, thread_id, checkpointer):
     )
 
 
-# Session state
+# ---------------- Session State ----------------
+
 if "thread_id" not in st.session_state:
     st.session_state.thread_id = str(uuid.uuid4())
 
+
 if "messages" not in st.session_state:
     st.session_state.messages = []
+
 
 if "checkpointer" not in st.session_state:
     st.session_state.checkpointer = InMemorySaver()
 
 
-# UI
+# Create persistent event loop
+if (
+    "loop" not in st.session_state
+    or st.session_state.loop.is_closed()
+):
+    st.session_state.loop = asyncio.new_event_loop()
+
+asyncio.set_event_loop(
+    st.session_state.loop
+)
+
+
+# ---------------- UI ----------------
+
 st.title("🤖 MCP + LangGraph AI Agent")
 st.caption("Calculator • Weather • Word Count")
 
 
 with st.sidebar:
+
     st.header("⚙️ Chat Settings")
 
     st.write("Thread ID:")
     st.code(st.session_state.thread_id)
 
-    if st.button("🆕 New Chat", use_container_width=True):
+    if st.button(
+        "🆕 New Chat",
+        use_container_width=True
+    ):
         st.session_state.thread_id = str(uuid.uuid4())
         st.session_state.messages = []
         st.rerun()
@@ -133,19 +172,24 @@ with st.sidebar:
     st.divider()
 
     st.header("🛠️ Available Tools")
+
     st.write("➕ Calculator")
     st.write("🌤️ Weather")
     st.write("📝 Word Count")
 
 
-# Chat history
+# ---------------- Chat History ----------------
+
 for message in st.session_state.messages:
+
     with st.chat_message(message["role"]):
         st.write(message["content"])
 
 
 user_input = st.chat_input("Ask something...")
 
+
+# ---------------- User Message ----------------
 
 if user_input:
 
@@ -158,14 +202,23 @@ if user_input:
         st.write(user_input)
 
     with st.chat_message("assistant"):
+
         with st.spinner("Thinking..."):
 
             try:
-                result = asyncio.run(
-                    run_agent(
-                        user_input,
-                        st.session_state.thread_id,
-                        st.session_state.checkpointer
+
+                # Make sure correct loop is active
+                asyncio.set_event_loop(
+                    st.session_state.loop
+                )
+
+                result = (
+                    st.session_state.loop.run_until_complete(
+                        run_agent(
+                            user_input,
+                            st.session_state.thread_id,
+                            st.session_state.checkpointer
+                        )
                     )
                 )
 
@@ -183,20 +236,38 @@ if user_input:
 
             except Exception as e:
 
-                status_code = getattr(e, "status_code", None)
+                status_code = getattr(
+                    e,
+                    "status_code",
+                    None
+                )
 
                 if status_code == 402:
-                    st.error("OpenRouter credits are insufficient.")
+
+                    st.error(
+                        "OpenRouter credits are insufficient."
+                    )
 
                 elif status_code == 401:
-                    st.error("OpenRouter API key is invalid or missing.")
+
+                    st.error(
+                        "OpenRouter API key is invalid or missing."
+                    )
 
                 elif status_code == 429:
-                    st.error("OpenRouter rate limit reached.")
+
+                    st.error(
+                        "OpenRouter rate limit reached."
+                    )
 
                 elif status_code and status_code >= 500:
-                    st.error("LLM provider server error. Please try again.")
+
+                    st.error(
+                        "LLM provider server error. Please try again."
+                    )
 
                 else:
-                    st.error(f"{type(e).__name__}: {e}")
 
+                    st.error(
+                        f"{type(e).__name__}: {e}"
+                    )
